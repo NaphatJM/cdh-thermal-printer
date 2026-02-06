@@ -12,6 +12,16 @@ export interface PrintResponse {
 }
 
 /**
+ * Printer information from Windows/system
+ */
+export interface PrinterInfo {
+    name: string;
+    driver: string;
+    port: string;
+    status_text: string;
+}
+
+/**
  * Convert Thai text to ImageData (Client-side only)
  *
  * ⚠️ REQUIRED: Sarabun font must be loaded in your HTML:
@@ -56,33 +66,33 @@ export function textToImageData(
 ): ImageData;
 
 /**
- * ThermalPrinter Service
+ * ThermalPrinter Service with Auto-Discovery
  * Fluent API for controlling thermal printer with ESC/POS commands
+ * Automatically discovers printer driver on ports 9123-9130
  *
  * @example
  * ```javascript
- * const printer = new ThermalPrinter("http://localhost:9123", 384);
+ * const printer = new ThermalPrinter(384);  // 384 dots = 58mm (default)
  * printer
  *     .init()
  *     .align(1)
  *     .printThaiText("สวัสดี")
  *     .feed(2)
  *     .cut()
- *     .print("Printer Name");
+ *     .print("Printer Name");  // Auto-discovers driver
  * ```
  */
 export class ThermalPrinter {
     /**
-     * Initialize ThermalPrinter instance
-     * @param driverApiUrl - URL of the thermal printer driver API (default: http://localhost:9123)
+     * Initialize ThermalPrinter instance with auto-discovery
      * @param width - Printer width in dots (384 = 58mm, 576 = 80mm, default: 384)
      */
-    constructor(driverApiUrl?: string, width?: number);
+    constructor(width?: number);
 
     /**
-     * Driver API URL
+     * Driver API URL (null until driver is discovered)
      */
-    readonly driverApi: string;
+    driverApi: string | null;
 
     /**
      * Printer width in dots
@@ -211,21 +221,42 @@ export class ThermalPrinter {
     getBuffer(): Uint8Array;
 
     /**
-     * Print to specific printer
+     * Auto-discover printer driver on localhost:9123-9130
+     * Performs health check and verifies it's a CDH-Driver service
+     * Caches discovered URL for subsequent calls
+     *
+     * @returns Promise<boolean> - true if driver found, false otherwise
+     * @throws Error if driver not found after scanning all ports
+     */
+    findDriver(): Promise<boolean>;
+
+    /**
+     * Print to specific printer (auto-discovers driver if needed)
      * @param printerName - Name of printer to print to (optional, will use first available if not provided)
      * @returns Promise resolving to print response
-     * @throws Error if printer not found or print failed
+     * @throws Error if driver not found or print failed
      */
     print(printerName?: string): Promise<PrintResponse>;
 
     // --- Static Methods ---
 
     /**
-     * Get list of available printers
-     * @param apiUrl - Driver API URL (default: http://localhost:9123)
-     * @returns Promise resolving to array of printer names
+     * Get list of available printers from Windows/system
+     * Auto-discovers driver if URL not provided
+     * @param overrideUrl - Driver API URL (optional, will auto-discover if not provided)
+     * @returns Promise resolving to array of PrinterInfo objects
+     *
+     * @example
+     * ```javascript
+     * const printers = await ThermalPrinter.getPrinters();
+     * // [
+     * //   { name: "thermal printer", driver: "Generic / Text Only", port: "USB001", status_text: "Ready" },
+     * //   { name: "HP LaserJet M1530 MFP Series PCL 6", ... },
+     * //   ...
+     * // ]
+     * ```
      */
-    static getPrinters(apiUrl?: string): Promise<string[]>;
+    static getPrinters(overrideUrl?: string): Promise<PrinterInfo[]>;
 }
 
 export {};

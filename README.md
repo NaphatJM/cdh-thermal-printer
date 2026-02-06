@@ -15,7 +15,8 @@ npm install @naphatjm/cdh-thermal-printer
 ```javascript
 import { ThermalPrinter } from "@naphatjm/cdh-thermal-printer";
 
-const printer = new ThermalPrinter("http://localhost:9123", 384);
+// ✨ No need to specify driver URL - auto-discovers on localhost:9123-9130
+const printer = new ThermalPrinter(384);
 // 384 is paper width (58mm)
 
 printer
@@ -31,24 +32,44 @@ printer
 ### Get Available Printers
 
 ```javascript
-const printers = await ThermalPrinter.getPrinters("http://localhost:9123");
+// Auto-discovers driver automatically
+const printers = await ThermalPrinter.getPrinters();
 console.log(printers);
 ```
 
 **Response Example:**
 
 ```json
-["EPSON TM-58 (Model 109)", "Star Micronics TSP100", "Generic ESC/POS Printer"]
+[
+    {
+        "name": "thermal printer",
+        "driver": "Generic / Text Only",
+        "port": "USB001",
+        "status_text": "Ready"
+    },
+    {
+        "name": "HP LaserJet M1530 MFP Series PCL 6",
+        "driver": "HP LaserJet M1530 MFP Series PCL 6",
+        "port": "HPLaserJetM1536dnfMFP",
+        "status_text": "Ready"
+    },
+    {
+        "name": "Microsoft Print to PDF",
+        "driver": "Microsoft Print To PDF",
+        "port": "PORTPROMPT:",
+        "status_text": "Ready"
+    }
+]
 ```
 
 ### Print Receipt (Full Example)
 
 ```javascript
-const printer = new ThermalPrinter("http://localhost:9123", 384);
+const printer = new ThermalPrinter(384);
 
-// Get available printers
+// Get available printers (auto-discovers driver)
 const printers = await ThermalPrinter.getPrinters();
-const printerName = printers[0];
+const printerName = printers[0].name;
 
 // Build receipt
 printer
@@ -71,14 +92,14 @@ printer
     .feed(3)
     .cut();
 
-// Send to printer
+// Send to printer (auto-discovers driver)
 await printer.print(printerName);
 ```
 
 ### Print Image (QR Code, Logo, etc.)
 
 ```javascript
-const printer = new ThermalPrinter("http://localhost:9123", 384);
+const printer = new ThermalPrinter(384);
 
 // Create canvas and draw image
 const canvas = document.createElement("canvas");
@@ -98,7 +119,7 @@ ctx.drawImage(qrImg, 150, 20, 100, 100);
 // Get image data and print
 const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
 
-// Send to printer
+// Send to printer (auto-discovers driver)
 const printers = await ThermalPrinter.getPrinters();
 printer
     .init()
@@ -106,7 +127,7 @@ printer
     .image(imageData) // Print the image
     .feed(2)
     .cut()
-    .print(printers[0]);
+    .print(printers[0].name);
 ```
 
 ## ⚠️ Important: Font Setup for Thai Text
@@ -120,6 +141,41 @@ When using `printThaiText()` or `textToImageData()`, you **must** load the Sarab
 ```
 
 Without this link, the printer will use the default system font instead of Sarabun.
+
+## How Auto-Discovery Works
+
+The library automatically scans for the printer driver on ports 9123-9130:
+
+```javascript
+const printer = new ThermalPrinter(384);
+
+// First call to print() triggers auto-discovery
+// Scans localhost:9123 → 9130 for CDH-Driver service
+// Caches the discovered URL for future calls
+await printer.print("Printer Name");
+
+// Subsequent calls reuse the cached URL
+await printer.print("Another Printer");
+
+// Reconnects automatically if connection is lost
+```
+
+**Manual Discovery (if needed):**
+
+```javascript
+const printer = new ThermalPrinter(384);
+
+// Explicitly find driver
+const found = await printer.findDriver();
+if (!found) {
+    console.error(
+        "Driver not found. Please run the printer driver application.",
+    );
+}
+
+// Now proceed with printing
+await printer.print("Printer Name");
+```
 
 ## Converting Thai Text (Client-side Helper)
 
@@ -166,7 +222,7 @@ export default function handler(req, res) {
         height: imageData.height,
     };
 
-    // Print using server-side library
+    // Print using server-side library (auto-discovers driver)
     const printer = new ThermalPrinter();
     try {
         printer.init().image(imageDataLike).feed(3).cut().print(printerName);
@@ -350,7 +406,7 @@ export async function POST(req: NextRequest) {
 #### Custom Paper Width (80mm)
 
 ```javascript
-const printer = new ThermalPrinter("http://localhost:9123", 576); // 80mm instead of 58mm
+const printer = new ThermalPrinter(576); // 80mm instead of 58mm (default 384)
 
 printer.init().line("Wide receipt").feed(2).cut().print("Printer");
 ```
@@ -358,6 +414,8 @@ printer.init().line("Wide receipt").feed(2).cut().print("Printer");
 #### Custom Font Size for Thai Text
 
 ```javascript
+const printer = new ThermalPrinter();
+
 printer
     .init()
     .bold(true)
@@ -372,6 +430,8 @@ printer
 #### Custom Divider and Alignment
 
 ```javascript
+const printer = new ThermalPrinter();
+
 printer
     .init()
     .align(2) // Right align
@@ -386,22 +446,10 @@ printer
     .print("Printer");
 ```
 
-#### Custom API Server
-
-```javascript
-// Connect to different printer server
-const printer = new ThermalPrinter(
-    "http://printer-server.example.com:8000",
-    384,
-);
-
-printer.init().line("Connected to custom API").print("Any Printer");
-```
-
 #### Mixed Customizations
 
 ```javascript
-const printer = new ThermalPrinter("http://192.168.1.100:9123", 576); // 80mm
+const printer = new ThermalPrinter(576); // 80mm (auto-discovers driver)
 
 printer
     .init()
@@ -561,11 +609,12 @@ await fetch("/api/print", { body: JSON.stringify(imageData) });
 ### Constructor
 
 ```javascript
-new ThermalPrinter((driverApiUrl = "http://localhost:9123"), (width = 384));
+new ThermalPrinter((width = 384));
 ```
 
-- `driverApiUrl`: URL of the thermal printer driver API
-- `width`: Printer width in dots (384 = 58mm, 576 = 80mm)
+- `width`: Printer width in dots (384 = 58mm, 576 = 80mm, default: 384)
+
+The driver URL is **auto-discovered** on ports 9123-9130 when first needed.
 
 ### Utility Functions
 
@@ -617,17 +666,43 @@ printer.image(imageData).print();
 
 - `clear()` - Clear all buffered commands
 - `getBuffer()` - Get current buffer as Uint8Array
-- `print(printerName)` - Send buffered commands to printer
+- `findDriver()` - Auto-discover printer driver on localhost:9123-9130, caches result
+- `print(printerName)` - Send buffered commands to printer (triggers auto-discovery if needed)
 
 ### Static Methods
 
-- `static async getPrinters(apiUrl)` - Get list of available printers
+- `static async getPrinters(overrideUrl)` - Get list of available printers from Windows/system
 
-    **Returns:** Array of printer names (strings)
+    **Returns:** Array of PrinterInfo objects
+
+    ```typescript
+    interface PrinterInfo {
+        name: string;
+        driver: string;
+        port: string;
+        status_text: string;
+    }
+    ```
+
+    **Example:**
 
     ```javascript
-    const printers = await ThermalPrinter.getPrinters("http://localhost:9123");
-    // ["EPSON TM-58", "Star Micronics TSP100", ...]
+    const printers = await ThermalPrinter.getPrinters();
+    // [
+    //   { name: "thermal printer", driver: "Generic / Text Only", port: "USB001", status_text: "Ready" },
+    //   { name: "HP LaserJet M1530 MFP Series PCL 6", driver: "HP LaserJet M1530 MFP Series PCL 6", ... },
+    //   ...
+    // ]
+
+    // Filter for thermal printers only
+    const thermalPrinters = printers.filter((p) =>
+        p.name.toLowerCase().includes("thermal"),
+    );
+
+    // Or with override URL (for custom server)
+    const printers = await ThermalPrinter.getPrinters(
+        "http://custom-driver:9123",
+    );
     ```
 
 ## Fluent API

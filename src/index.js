@@ -12,8 +12,8 @@ import { convertCanvasToEscPos, textToImageData } from "./utils";
  */
 export { textToImageData } from "./utils";
 export class ThermalPrinter {
-    constructor(driverApiUrl = "http://localhost:9123", width = 384) {
-        this.driverApi = driverApiUrl;
+    constructor(width = 384) {
+        this.driverApi = null; // เริ่มต้นยังไม่มี URL
         this.printerWidth = width; // 384 dots = 58mm, 576 dots = 80mm
         this.buffer = [];
     }
@@ -153,12 +153,69 @@ export class ThermalPrinter {
         return new Uint8Array(this.buffer);
     }
 
+    // --- 🔥 Auto Discovery & Print Logic 🔥 ---
+
+    /**
+     * วิ่งหา Driver ใน Port 9123-9130
+     * (Lazy Mode: เรียกใช้เมื่อจำเป็น)
+     */
+    async findDriver() {
+        // 1. ถ้ามี URL เดิมอยู่ ลองเช็คว่ายังอยู่ไหม (Ping)
+        if (this.driverApi) {
+            try {
+                const res = await fetch(`${this.driverApi}/health`);
+                if (res.ok) return true; // ยังอยู่ดี
+            } catch (e) {
+                console.warn("Driver connection lost, rescanning...");
+                this.driverApi = null;
+            }
+        }
+
+        // 2. ถ้าไม่มี หรือหลุด ให้วนหาใหม่
+        for (let port = 9123; port <= 9130; port++) {
+            const url = `http://localhost:${port}`;
+            try {
+                // ตั้ง Timeout สั้นๆ (100ms) เพื่อความเร็ว
+                const controller = new AbortController();
+                const timeoutId = setTimeout(() => controller.abort(), 100);
+
+                const res = await fetch(`${url}/health`, {
+                    signal: controller.signal,
+                });
+                clearTimeout(timeoutId);
+
+                if (res.ok) {
+                    const data = await res.json();
+                    // เช็ค Signature ว่าใช่ Driver ของเราไหม
+                    if (data.service === "CDH-Driver") {
+                        this.driverApi = url;
+                        console.log(`✅ Driver found at: ${url}`);
+                        return true;
+                    }
+                }
+            } catch (e) {
+                // Port ไม่ว่าง หรือไม่ใช่ของเรา -> ข้าม
+                continue;
+            }
+        }
+        console.error("❌ CDH Driver not found (Is .exe running?)");
+        return false;
+    }
+
     async print(printerName) {
-        // ถ้าไม่ส่งชื่อมา ให้ลองดึงตัวแรก
+        // 1. หา Driver ก่อน (Lazy Discovery)
+        const found = await this.findDriver();
+        if (!found) {
+            throw new Error(
+                "Cannot connect to Printer Driver. Please run the application.",
+            );
+        }
+
+        // 2. ถ้าไม่ระบุชื่อ Printer ให้ดึงตัวแรก
         if (!printerName) {
             const printers = await ThermalPrinter.getPrinters(this.driverApi);
-            if (printers.length > 0) printerName = printers[0];
-            else throw new Error("No printer found.");
+            if (printers.length > 0) printerName = printers[0].name;
+            else throw new Error("No printer found in Windows settings.");
         }
 
         try {
@@ -174,7 +231,7 @@ export class ThermalPrinter {
                 },
             );
 
-            if (!res.ok) throw new Error("Driver Error");
+            if (!res.ok) throw new Error("Driver returned error");
 
             this.clear();
             return { success: true };
@@ -184,14 +241,22 @@ export class ThermalPrinter {
         }
     }
 
-    // --- Static Methods ---
+    // Static Method: ต้องสร้าง instance ชั่วคราวไปหา driver
+    static async getPrinters(overrideUrl = null) {
+        let apiUrl = overrideUrl;
 
-    static async getPrinters(apiUrl = "http://localhost:9123") {
+        if (!apiUrl) {
+            const temp = new ThermalPrinter();
+            const found = await temp.findDriver();
+            if (found) apiUrl = temp.driverApi;
+            else return [];
+        }
+
         try {
             const res = await fetch(`${apiUrl}/printers`);
             return await res.json();
         } catch (e) {
-            console.error("Connection Error:", e);
+            console.error("Get Printers Failed:", e);
             return [];
         }
     }
