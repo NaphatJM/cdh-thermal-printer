@@ -1,0 +1,36 @@
+{
+    "name": "@naphatjm/cdh-thermal-printer",
+    "version": "1.0.4",
+    "description": "Thai Thermal Printer Library via Local Driver",
+    "type": "module",
+    "files": [
+        "dist"
+    ],
+    "main": "./dist/thermal-printer.umd.js",
+    "module": "./dist/thermal-printer.es.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "import": "./dist/thermal-printer.es.js",
+            "require": "./dist/thermal-printer.umd.js"
+        }
+    },
+    "scripts": {
+        "dev": "vite",
+        "build": "vite build",
+        "preview": "vite preview"
+    },
+    "keywords": [
+        "thermal",
+        "printer",
+        "escpos",
+        "thai",
+        "driver"
+    ],
+    "author": "CDH",
+    "license": "ISC",
+    "devDependencies": {
+        "vite": "^7.3.1"
+    }
+}
