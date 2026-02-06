@@ -2,16 +2,27 @@
 
 /**
  * แปลงข้อมูลภาพ (ImageData) เป็นคำสั่ง ESC/POS GS v 0
- * @param {ImageData} imageData
- * @returns {number[]} Array ของ Byte คำสั่ง
+ * รองรับภาพ QR Code, Logo, Thai Text เป็นต้น
+ *
+ * @param {ImageData|Object} imageData - ImageData object หรือ ImageDataLike {data, width, height}
+ * @param {number} brightnessThreshold - ค่าเกณฑ์สำหรับแยกสีดำ/ขาว (0-765, default: 382)
+ * @returns {number[]} Array ของ Byte คำสั่ง ESC/POS
+ *
+ * @example
+ * // QR Code (300x300px)
+ * const qrCanvas = document.createElement('canvas');
+ * await QRCode.toCanvas(qrCanvas, 'https://example.com', { width: 300 });
+ * const imageData = qrCanvas.getContext('2d').getImageData(0, 0, 300, 300);
+ * const bytes = convertCanvasToEscPos(imageData);
  */
-export function convertCanvasToEscPos(imageData) {
+export function convertCanvasToEscPos(imageData, brightnessThreshold = 382) {
     const width = imageData.width;
     const height = imageData.height;
     const pixels = imageData.data;
 
-    // 1 Byte = 8 pixels แนวนอน
-    const xBytes = width / 8;
+    // 1 Byte = 8 pixels แนวนอน (pad ให้ได้ width ที่หารด้วย 8 ลงตัว)
+    const paddedWidth = Math.ceil(width / 8) * 8;
+    const xBytes = paddedWidth / 8;
 
     let command = [];
 
@@ -27,14 +38,25 @@ export function convertCanvasToEscPos(imageData) {
         for (let x = 0; x < xBytes; x++) {
             let byte = 0;
             for (let bit = 0; bit < 8; bit++) {
-                // คำนวณตำแหน่ง Pixel ใน Array (RGBA = 4 ช่องต่อ 1 pixel)
-                const pxIndex = (y * width + x * 8 + bit) * 4;
+                const pixelX = x * 8 + bit;
 
-                // เช็คความสว่าง (R+G+B)
-                // ถ้าค่าต่ำกว่า 380 (ค่อนข้างมืด) ให้ถือเป็นสีดำ (Bit=1)
+                // ถ้าเกินขอบภาพ ให้เป็นสีขาว (Bit=0)
+                if (pixelX >= width) {
+                    continue;
+                }
+
+                // คำนวณตำแหน่ง Pixel ใน Array (RGBA = 4 ช่องต่อ 1 pixel)
+                const pxIndex = (y * width + pixelX) * 4;
+
+                // เช็คความสว่าง: R+G+B (ระหว่าง 0-765)
+                // ถ้าค่าต่ำกว่า threshold ให้ถือเป็นสีดำ (Bit=1)
                 const brightness =
-                    pixels[pxIndex] + pixels[pxIndex + 1] + pixels[pxIndex + 2];
-                if (brightness < 380) {
+                    pixels[pxIndex] + // Red
+                    pixels[pxIndex + 1] + // Green
+                    pixels[pxIndex + 2]; // Blue
+                // (ไม่ใช้ Alpha channel)
+
+                if (brightness < brightnessThreshold) {
                     byte |= 1 << (7 - bit);
                 }
             }

@@ -130,6 +130,40 @@ printer
     .print(printers[0].name);
 ```
 
+### Print QR Code (Advanced Example)
+
+```javascript
+import QRCode from "qrcode";
+
+const printer = new ThermalPrinter(384);
+const canvas = document.createElement("canvas");
+
+// Generate QR code (any size, will be auto-padded)
+await QRCode.toCanvas(canvas, "https://example.com", {
+    width: 300, // ✨ Auto-pads to 304px (multiple of 8)
+    margin: 2,
+    color: {
+        dark: "#000000",
+        light: "#FFFFFF",
+    },
+});
+
+// Extract image data
+const imageData = canvas
+    .getContext("2d")
+    ?.getImageData(0, 0, canvas.width, canvas.height);
+
+// Send to printer (auto-discovers driver)
+const printers = await ThermalPrinter.getPrinters();
+printer
+    .init()
+    .align(1)
+    .image(imageData) // ← Handles any width automatically
+    .feed(2)
+    .cut()
+    .print(printers[0].name);
+```
+
 ## ⚠️ Important: Font Setup for Thai Text
 
 When using `printThaiText()` or `textToImageData()`, you **must** load the Sarabun font in your HTML file:
@@ -587,6 +621,47 @@ const imageDataLike = {
 printer.image(imageDataLike);
 ```
 
+### Issue: QR Code prints blurry or corrupted
+
+**Problem:** QR code width not compatible with thermal printer (not multiple of 8 pixels)
+
+**Solution:** Library auto-pads any width - no need to manually adjust
+
+```javascript
+// ✅ Works - Any size QR code
+const qrCanvas = document.createElement("canvas");
+await QRCode.toCanvas(qrCanvas, "https://example.com", { width: 300 }); // 300px QR
+const imageData = qrCanvas.getContext("2d")?.getImageData(0, 0, 300, 300);
+printer.image(imageData); // Auto-pads to 304px (38 bytes × 8 = 304px)
+
+// ✅ Also works
+await QRCode.toCanvas(qrCanvas, "https://example.com", { width: 256 }); // 256px QR
+// Auto-pads to 256px (already multiple of 8)
+```
+
+**How it works:**
+
+- QR 300px → padded to 304px (38 bytes)
+- QR 256px → padded to 256px (32 bytes, already aligned)
+- QR 210px → padded to 216px (27 bytes)
+
+### Issue: QR Code prints as solid black or white square
+
+**Problem:** Image brightness threshold doesn't match QR code contrast
+
+**Solution:** QR codes use pure black (0) and pure white (255), threshold of 382 is perfect for them
+
+```javascript
+// This should work out-of-the-box
+const imageData = canvas
+    .getContext("2d")
+    ?.getImageData(0, 0, canvas.width, canvas.height);
+printer.image(imageData); // Uses default threshold 382 (0-765 scale)
+
+// If custom image needs adjustment (not typical)
+// Advanced: Can be customized in convertCanvasToEscPos() function
+```
+
 ### Issue: TextToImageData throws error on server
 
 **Problem:** `textToImageData()` requires browser Canvas API
@@ -659,6 +734,17 @@ printer.image(imageData).print();
 #### Image & Printing
 
 - `image(imageData)` - Print image from canvas ImageData or ImageDataLike object
+    - **Auto-adjusts width:** Any image width is automatically padded to multiple of 8 pixels
+    - **QR Code friendly:** Supports any QR code size (300px, 256px, etc.)
+    - **Smart brightness detection:** Uses configurable threshold (default: 382) to convert to black/white
+    - **Supports:** QR codes, logos, barcodes, custom graphics
+
+    ```javascript
+    // Works with any image size
+    const imageData = canvas.getContext("2d")?.getImageData(0, 0, 300, 300); // 300px QR
+    printer.image(imageData); // Auto-pads to 304px
+    ```
+
 - `printThaiText(text, fontSize)` - Print Thai text with automatic image rendering (client-side only, default fontSize: 22px)
 - `raw(bytes)` - Send raw byte array
 
