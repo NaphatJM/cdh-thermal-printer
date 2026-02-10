@@ -188,6 +188,7 @@ export class ThermalPrinter {
                     const data = await res.json();
                     // เช็ค Signature ว่าใช่ Driver ของเราไหม
                     if (data.service === "CDH-Driver") {
+                        this.driverApi = url;
                         return true;
                     }
                 }
