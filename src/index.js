@@ -153,7 +153,7 @@ export class ThermalPrinter {
         return new Uint8Array(this.buffer);
     }
 
-    // --- 🔥 Auto Discovery & Print Logic 🔥 ---
+    // ---  Auto Discovery & Print Logic  ---
 
     /**
      * วิ่งหา Driver ใน Port 9123-9130
@@ -188,8 +188,6 @@ export class ThermalPrinter {
                     const data = await res.json();
                     // เช็ค Signature ว่าใช่ Driver ของเราไหม
                     if (data.service === "CDH-Driver") {
-                        this.driverApi = url;
-                        console.log(`✅ Driver found at: ${url}`);
                         return true;
                     }
                 }
@@ -198,7 +196,6 @@ export class ThermalPrinter {
                 continue;
             }
         }
-        console.error("❌ CDH Driver not found (Is .exe running?)");
         return false;
     }
 
