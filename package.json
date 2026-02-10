@@ -1,6 +1,6 @@
 {
     "name": "@naphatjm/cdh-thermal-printer",
-    "version": "1.0.7",
+    "version": "1.0.8",
     "description": "Thai Thermal Printer Library via Local Driver",
     "type": "module",
     "files": [
