@@ -258,4 +258,62 @@ export class ThermalPrinter {
             return [];
         }
     }
+
+    /**
+     * ค้นหาปริ้นเตอร์ด้วย VID และ PID
+     * @param {string} vid - Vendor ID (เช่น "VID_0FE6")
+     * @param {string} pid - Product ID (เช่น "PID_811E")
+     * @param {string} overrideUrl - URL ของ Driver (optional)
+     * @returns {Promise<Array>} - Array ของปริ้นเตอร์ที่ตรงกับ VID/PID
+     */
+    static async getPrinters_filterByVidPid(vid, pid, overrideUrl = null) {
+        let apiUrl = overrideUrl;
+
+        if (!apiUrl) {
+            const temp = new ThermalPrinter();
+            const found = await temp.findDriver();
+            if (found) apiUrl = temp.driverApi;
+            else return [];
+        }
+
+        try {
+            const res = await fetch(`${apiUrl}/printers`);
+            const allPrinters = await res.json();
+            // Filter โดย VID และ PID
+            return allPrinters.filter(p => p.vid === vid && p.pid === pid);
+        } catch (e) {
+            console.error("Get Printers Failed:", e);
+            return [];
+        }
+    }
+
+    /**
+     * พิมพ์ไปยังปริ้นเตอร์ที่ระบุด้วย VID และ PID
+     * @param {string} vid - Vendor ID (เช่น "VID_0FE6")
+     * @param {string} pid - Product ID (เช่น "PID_811E")
+     * @returns {Promise<Object>} - ผลลัพธ์ของการพิมพ์
+     */
+    async print_fixId(vid, pid) {
+        // 1. หา Driver ก่อน (Lazy Discovery)
+        const found = await this.findDriver();
+        if (!found) {
+            throw new Error(
+                "Cannot connect to Printer Driver. Please run the application.",
+            );
+        }
+
+        // 2. ค้นหาปริ้นเตอร์ด้วย VID/PID
+        const printers = await ThermalPrinter.getPrinters_filterByVidPid(
+            vid,
+            pid,
+            this.driverApi,
+        );
+        if (printers.length === 0) {
+            throw new Error(`No printer found with VID: ${vid}, PID: ${pid}`);
+        }
+
+        // 3. พิมพ์ไปยังปริ้นเตอร์ตัวแรก
+        const printerName = printers[0].name;
+        return this.print(printerName);
+    }
 }

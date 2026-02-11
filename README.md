@@ -45,21 +45,60 @@ console.log(printers);
         "name": "thermal printer",
         "driver": "Generic / Text Only",
         "port": "USB001",
+        "vid": "VID_0FE6",
+        "pid": "PID_811E",
         "status_text": "Ready"
     },
     {
         "name": "HP LaserJet M1530 MFP Series PCL 6",
         "driver": "HP LaserJet M1530 MFP Series PCL 6",
         "port": "HPLaserJetM1536dnfMFP",
+        "vid": "",
+        "pid": "",
         "status_text": "Ready"
     },
     {
         "name": "Microsoft Print to PDF",
         "driver": "Microsoft Print To PDF",
         "port": "PORTPROMPT:",
+        "vid": "",
+        "pid": "",
         "status_text": "Ready"
     }
 ]
+```
+
+### Get Printers by VID/PID
+
+```javascript
+// Get thermal printers with specific VID/PID (recommended for fixed printers)
+const thermalPrinters = await ThermalPrinter.getPrinters_filterByVidPid(
+    "VID_0FE6",
+    "PID_811E"
+);
+
+if (thermalPrinters.length > 0) {
+    console.log(thermalPrinters[0].name); // "Thermal Printer"
+}
+```
+
+**Why use VID/PID?** When you have multiple USB thermal printers, VID/PID ensures you always print to the correct device:
+
+```javascript
+const printer = new ThermalPrinter();
+
+printer
+    .init()
+    .line("Hello World")
+    .feed(2)
+    .cut();
+
+// ✅ Safe: Always prints to the specific thermal printer
+await printer.print_fixId("VID_0FE6", "PID_811E");
+
+// ❌ Risky: Might print to wrong device if multiple printers exist
+const printers = await ThermalPrinter.getPrinters();
+await printer.print(printers[0].name);
 ```
 
 ### Print Receipt (Full Example)
@@ -755,6 +794,39 @@ printer.image(imageData).print();
 - `findDriver()` - Auto-discover printer driver on localhost:9123-9130, caches result
 - `print(printerName)` - Send buffered commands to printer (triggers auto-discovery if needed)
 
+- `async print_fixId(vid, pid)` - Send buffered commands to a specific printer using Vendor ID and Product ID
+
+    **Parameters:**
+    - `vid` (string) - Vendor ID (e.g., "VID_0FE6")
+    - `pid` (string) - Product ID (e.g., "PID_811E")
+
+    **Returns:** Promise with print result
+
+    **Example:**
+
+    ```javascript
+    const printer = new ThermalPrinter();
+
+    printer
+        .init()
+        .align(1)
+        .bold(true)
+        .line("Receipt")
+        .bold(false)
+        .divider("-", 32)
+        .line("Item 1     50.-")
+        .line("Item 2     35.-")
+        .divider("-", 32)
+        .line("Total:     85.-")
+        .feed(3)
+        .cut();
+
+    // Print to specific thermal printer by VID/PID
+    await printer.print_fixId("VID_0FE6", "PID_811E");
+    ```
+
+    **Why use this?** When you have multiple USB thermal printers, use VID/PID to ensure the correct printer is selected automatically
+
 ### Static Methods
 
 - `static async getPrinters(overrideUrl)` - Get list of available printers from Windows/system
@@ -766,6 +838,8 @@ printer.image(imageData).print();
         name: string;
         driver: string;
         port: string;
+        vid: string;       // Vendor ID (e.g., "VID_0FE6")
+        pid: string;       // Product ID (e.g., "PID_811E")
         status_text: string;
     }
     ```
@@ -775,8 +849,8 @@ printer.image(imageData).print();
     ```javascript
     const printers = await ThermalPrinter.getPrinters();
     // [
-    //   { name: "thermal printer", driver: "Generic / Text Only", port: "USB001", status_text: "Ready" },
-    //   { name: "HP LaserJet M1530 MFP Series PCL 6", driver: "HP LaserJet M1530 MFP Series PCL 6", ... },
+    //   { name: "thermal printer", driver: "Generic / Text Only", port: "USB001", vid: "VID_0FE6", pid: "PID_811E", status_text: "Ready" },
+    //   { name: "HP LaserJet M1530 MFP Series PCL 6", driver: "HP LaserJet M1530 MFP Series PCL 6", vid: "", pid: "", ... },
     //   ...
     // ]
 
@@ -789,6 +863,29 @@ printer.image(imageData).print();
     const printers = await ThermalPrinter.getPrinters(
         "http://custom-driver:9123",
     );
+    ```
+
+- `static async getPrinters_filterByVidPid(vid, pid, overrideUrl)` - Get list of printers filtered by Vendor ID and Product ID
+
+    **Parameters:**
+    - `vid` (string) - Vendor ID (e.g., "VID_0FE6")
+    - `pid` (string) - Product ID (e.g., "PID_811E")
+    - `overrideUrl` (string, optional) - Custom driver URL
+
+    **Returns:** Array of matching PrinterInfo objects
+
+    **Example:**
+
+    ```javascript
+    // Get only thermal printers with specific VID/PID
+    const thermalPrinters = await ThermalPrinter.getPrinters_filterByVidPid(
+        "VID_0FE6",
+        "PID_811E"
+    );
+    console.log(thermalPrinters[0].name); // "Thermal Printer"
+
+    // This is useful when you have multiple USB thermal printers
+    // and want to ensure you're printing to the right one
     ```
 
 ## Fluent API
